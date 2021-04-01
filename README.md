@@ -1,133 +1,76 @@
-# TEC Redshift Disk Specification (Revision 001)
-A specification of the TEC Redshift exported images format in the [EXAPUNKS](http://www.zachtronics.com/exapunks) game by [Zachtronics](https://www.zachtronics.com/).
+# TEC Redshift Disk Specification (Revision 002)
+A specification of the TEC Redshift exported images format in the [EXAPUNKS](https://www.zachtronics.com/exapunks) game by [Zachtronics](https://www.zachtronics.com/).
 
-# Values structures:
+[The original specification](https://github.com/Rami-Sabbagh/TEC-Redshift-Disk-Specification "The original specification") was written by Rami Sabbagh. I decided to fork this project and clean up the layout a little bit, so someone looking to implement this in software can go about it in a more linear fashion.
 
-## Bool
-- 1-byte, 0 for _false_, 1 for _true_
+One discovery I made *very* recently is that the uncompressed solution data is literally **exactly the same** as the .SOLUTION format used by the game, which explains the redundant "PB039" in the header, and might help me figure out the purpose of some of those unknown bytes and ints.
 
-## Byte
-- 1-byte, it's a byte ! :P
+# Reading the image file
+The solution data is stored directly on the image using a method called *steganography*. To read out the image, implement this code in your preferred language:
 
-## Int
-- 4-bytes, little-endian format
+```
+For each pixel in the image (Left to right, then top to bottom):
+	Add lowest bit of red channel to bit stream
+	Add lowest bit of green channel to bit stream
+	Add lowest bit of blue channel to bit stream
+    
+```
 
-## String
-- The string's length (Int)
-- The actual string data, an sequence of characters
+Please note that with very large solutions, the game may [store data in higher bit planes.](https://www.reddit.com/r/exapunks/comments/dumqv1/if_youre_curious_a_game_cartridge_filled_to_the/ "store data in higher bit planes.") It's recommended that your reader/writer program supports this mode.
 
-# The disk raw data structure:
-The disk raw data has the following structure:
-- Compressed solution data's length (Int)
-- Compressed solution data's checksum (Int)
-- Compressed solution data (sequence of bytes)
-- Garbage data (unknown length)
+You should now have a bit stream, which with normal disk images should contain 279,000 bits. Next, you need to convert this bit stream into a byte stream (*or add those bits to the byte stream immediately*), LSB first, like this:
 
-## Dumping the disk raw data:
-The disk raw data, is stored in the image pixels color values, inorder to dump it, follow this protocol:
-
-### 1. Read the bitstream:
-
-1. Iterate over (map) the image pixels, from top-left, into the bottom-right, line by line.
-2. Read the first bit of each of RGB channel values (ignore the alpha ones), and store it into a _"bitstream array"_
-
-### 2. Convert the bit stream into bytes:
-
-1. Put every 8 bits into a byte, the first bit in the stream is the least signicant bit of a byte, the bitstream could be visualized as
 ```
 | 1 2 4 8 16 32 64 128 | 1 2 4 8 16 32 64 128 | ...
   ^                    --->
 First bit         Stream flow
 ```
-2. Insert each resulting byte into a bytes array, or you could write them into a file directly, as you wish in your implementation.
 
-## Compressed solution data's length (Int):
-An int, which is the length (in bytes) of the compressed solution data, you'll have to read it so you know how to extract the compressed solution data from the raw disk data and not include the garbage.
+# Data types
+The .SOLUTION file format uses four different data types:
+- (Byte) Pretty self-explanatory, just a single byte
+- (Boolean) 1 byte, True = 0x01, False = 0x00
+- (Int) 32-bit little-endian integer
+- (String) An Int containing the length, followed by raw ASCII text
 
-## Compressed solution data's checksum (Int):
-An int, which is a checksum of the compressed solution data, it's optional to verify it, but better do that.
+# Raw disk image data
+The data on the disk image itself consists of the following:
+- (Int) Length of compressed solution data
+- (Int) 16-bit Fletcher's checksum of compressed solution data, stored in a 32-bit Int, for some reason
+- (Byte[]) Compressed solution data
+- Any data you might find after this point is irrelevant garbage data. Just don't use it - If you're reading the disk in real time, you should just stop at this point.
 
-The checksum algorithm used is [Fletcher-16 checksum](https://en.wikipedia.org/wiki/Fletcher%27s_checksum) (Note that the checkbytes are not used).
+The solution data is compressed using Zlib / DEFLATE, to save disk space.
 
-## Compressed solution data (sequence of bytes):
-It's the game solution data, but **zlib** compressed.
+# Decompressed image data
+As mentioned at the start, the decompressed image data is literally a .SOLUTION file. I'd imagine that, since Zachtronics already made a file format just to hold user code, they decided to not make **another** format just to load onto the disks, and instead just loaded a compressed copy of a .SOLUTION file onto the disk.
 
-## The garbage data (unkown length):
-It's no useful data, just ignore it and throw it in garbage, it's there due the nature of storing the data in the image.
+The .SOLUTION file format consists of a **header** and one or more **agents**, stuck together with no delimiters or padding.
 
-# Solution data:
-The game solution data has the following structure:
-- unknown_01 (Int)
-- level_id (String)
-- solution_name (String)
-- unknown_02 (Int)
-- solution_length (Int)
-- unknown_03 (Int)
-- exa_count (Int)
-- exa_list
+## Header data
+- (Int) Unknown purpose - I'll try to find out what this is for
+- (String) Level ID - For Redshift disks, this is always "PB039"
+- (String) Solution name - Usually written on the disk image
+- (Int) Unknown purpose - I'll try to find out what this is for [1]
+- (Int) Total line count for solution - Can be omitted for quick and dirty scripts [1]
+- (Int) Unknown purpose - I'll try to find out what this is for [1]
+- (Int) Agent count - How many EXAs you start the solution with [1]
 
-## unknown_01, unknown_02, unknown_03
-They are really unknown.
+[1] It's possible that this group of four Ints is used to store the statistics for a given solution. If so, they would be sequenced like: Cycles, Size, Activity, EXAs. Since the Redshift doesn't bother counting cycles or activity, since its code is made to run indefinitely, these values would be set to 0.
 
-> If someone find a pattern and discoveres what they are, please create a pull request.
+## Agent data
+- (Byte) Unknown purpose, always 0x0A for some reason [1]
+- (String) Agent / EXA name
+- (String) Agent / EXA code (Same as editor, using Unix line endings; 0x0A)
+- (Byte) Editor view mode
+  - 0 = Default view, maximized
+  - 1 = Minimized, don't show code or registers
+  - 2 = Follow current instruction
+- (Boolean) Is M-bus local by default?
+- (Boolean[]) Default sprite [2]
 
-## level_id (String)
-It's the internal ID of the game's level, which is always `PB039` for the TEC Redshift solutions.
-
-## solution_name (String)
-The name of the solution, in other words, the name of the game.
-
-## solution length (Int)
-The sum of the functional instructions count for every exa
-
-> Functional instructions are all instructions except DATA and NOTE, empty lines and ; comments are also ignored.
-
-## exa_count (Int)
-The count of exas initiated in this solution, can't be bigger than 36
-
-> Note that in-game execution could have a higher number of total EXAs !
-
-## exa_list
-It's a sequence of EXA data structures (check below), without any separator between them.
-
-# EXA Data structure:
-Each EXA Data has the following structure:
-- unknown_04 (Byte)
-- exa_name (String)
-- exa_code (String)
-- exa_code_view_mode (Byte)
-- exa_m_register_mode (Byte)
-- exa_sprite (sequence of Bools)
-
-## unknown_04 (Int)
-It's really unkown, it has been found with value (10) in the all observed TEC games.
-> If someone find a pattern and discoveres what it is, please create a pull request.
-
-## exa_name (String)
-The name of the EXA, it's can't be longer than 2 character.
-
-## exa_code (String)
-The code of the EXA, as written in the editor, contains new line characters and such.
-
-## exa_code_view_mode (Int)
-The mode of the EXA code windows, has the following possible values:
-- [0] Default maximized view.
-- [1] Minimized, no visible code or registers.
-- [2] Follow current instruction.
-
-## exa_m_register_mode (Int)
-The initial mode of the M register, has the following possible values:
-- [0] Global mode (Default).
-- [1] Local mode.
-> The M register mode could be toggled during the EXA execution using the `MODE` instruction.
-
-## exa_sprite (sequence of Bools)
-A sequence of 100 Bools, representing the sprite pixel data from top-left into the top-right, line by line.
-
-Each pixel has the following possible values:
-
-- [True] White.
-- [False] Black/Transparent (Default).
+[1] It's possible that this value is intended as a line ending, to make the file more human readable in medium-tech editors like Notepad++
+[2] Array of 100 Booleans, read left to right, then top to bottom - True = White pixel, False = Black pixel
 
 # Outro
 That's what we've discoverd about the TEC disks format so far, use it for good please ;)
