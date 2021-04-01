@@ -56,7 +56,7 @@ The .SOLUTION file format consists of a **header** and one or more **agents**, s
 - (Int) Unknown purpose - I'll try to find out what this is for [1]
 - (Int) Agent count - How many EXAs you start the solution with [1]
 
-[1] It's possible that this group of four Ints is used to store the statistics for a given solution. If so, they would be sequenced like: Cycles, Size, Activity, EXAs. Since the Redshift doesn't bother counting cycles or activity, since its code is made to run indefinitely, these values would be set to 0.
+[1] It's possible that this group of four Ints is used to store the statistics for a given solution. If so, they would be sequenced like: Cycles, Size, Activity, EXAs. Since code on the Redshift is made to run idefinitely, it likely wouldn't have counters for cycles or activity, and as such these statistics would be set to 0.
 
 ## Agent data
 - (Byte) Unknown purpose, always 0x0A for some reason [1]
@@ -70,6 +70,7 @@ The .SOLUTION file format consists of a **header** and one or more **agents**, s
 - (Boolean[]) Default sprite [2]
 
 [1] It's possible that this value is intended as a line ending, to make the file more human readable in medium-tech editors like Notepad++
+
 [2] Array of 100 Booleans, read left to right, then top to bottom - True = White pixel, False = Black pixel
 
 # Outro
