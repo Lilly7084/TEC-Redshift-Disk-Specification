@@ -1,0 +1,96 @@
+    I claimed that the decompressed solution data is of identical layout to the
+.SOLUTION file format. I'm not entirely sure if that's true, but I decided that
+I should check anyway, given my large collection of solution files. Here's a
+comparison of their headers. Files are stored at Documents\My Games\EXAPUNKS\
+  <some long weird number which is the only item in that folder>\
+
+@ aberdeen-1.solution
+FE 03 00 00
+06 00 00 00 "PB031B"
+0E 00 00 00 "NEW SOLUTION 1"
+00 00 00 00 00 00 00 00 00 00 00 00 03 00 00 00
+
+@ alliance-power-and-light-1.solution
+FE 03 00 00
+05 00 00 00 "PB021"
+0E 00 00 00 "NEW SOLUTION 1"
+00 00 00 00 00 00 00 00 03 00 00 00 00 00 00 00
+2E 00 00 00 01 00 00 00 28 00 00 00 02 00 00 00
+29 00 00 00 02 00 00 00
+
+@ bloodlust-online-1.solution
+FE 03 00 00
+05 00 00 00 "PB054"
+0E 00 00 00 "NEW SOLUTION 1"
+00 00 00 00 00 00 00 00 03 00 00 00 00 00 00 00
+33 04 00 00 01 00 00 00 87 00 00 00 02 00 00 00
+1A 00 00 00 02 00 00 00
+
+@ crystalair-international-1.solution
+FE 03 00 00
+05 00 00 00 "PB055"
+0E 00 00 00 "NEW SOLUTION 1"
+00 00 00 00 00 00 00 00 03 00 00 00 00 00 00 00
+89 00 00 00 01 00 00 00 95 00 00 00 02 00 00 00
+33 00 00 00 02 00 00 00
+
+... And now, where it gets really interesting,
+  the sandbox file as it appears ON your hard drive!
+
+@ sandbox-1.solution
+FE 03 00 00
+05 00 00 00 "PB039"
+0B 00 00 00 "REDSHIFT OS"
+00 00 00 00 22 00 00 00 00 00 00 00 01 00 00 00
+
+    Sometimes, like with the Aberdeen and Sandbox levels, the format exactly
+matches the data found on the disk. However, most solution files use a very
+different format. (The agents are exactly the same, but the header changes.)
+
+    A breakdown of one example file (Bloodlust Online) is as follows:
+FE 03 00 00       File magic? I don't know, it's always FE 03 00 00...
+05 00 00 00       Level ID - Length in bytes
+"PB054"           Level ID
+0E 00 00 00       Solution name - Length in bytes
+"NEW SOLUTION 1"  Solution name
+00 00 00 00       Unknown function - Padding?
+00 00 00 00       Unknown function - Padding?
+03 00 00 00       Unknown function (Table size?)
+00 00 00 00       Unknown function (Table index?)
+33 04 00 00       Cycle count (1,075)
+01 00 00 00       Unknown function (Table index?)
+87 00 00 00       Line count (135)
+02 00 00 00       Unknown function (Table index?)
+1A 00 00 00       Activity (26)
+02 00 00 00       Agent count
+
+    A breakdown of the sandbox file is as follows:
+FE 03 00 00       File magic? I don't know, it's always FE 03 00 00...
+05 00 00 00       Level ID - Length in bytes
+"PB039"           Level ID
+0B 00 00 00       Solution name - Length in bytes
+"REDSHIFT OS"     Solution name
+00 00 00 00       Unknown function - Padding?
+22 00 00 00       Line count (34)
+00 00 00 00       Unknown function - (Table size?)
+01 00 00 00       Agent count
+
+A new data type has been defined: Table
+  - (Int) Number of entries
+  - For each entry:
+    - (Int) Entry index, starting at 0
+    - (Int) Entry value
+
+The common header breakdown of these files is most likely:
+- (Int   ) File magic, always FE 03 00 00
+- (String) Level ID, for sandbox levels always PB039
+- (String) Solution name
+- (Int   ) Unknown function, always set to 0 (Padding?)
+- (Int   ) Line count if statistics table is empty, otherwise 00 00 00 00
+- (Table ) Statistics, arranged as { Cycles, Lines, Activity } [1]
+- (Int   ) Agent count
+
+[1] Insert, but DO NOT populate, this table for sandbox and battle levels, or
+    in other cases where cycles and activity aren't recorded. In these cases,
+    the table appears as a single Int (00 00 00 00), taking the form of value
+    unknown_03 in the original version of the documentation.
