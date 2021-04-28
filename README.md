@@ -1,14 +1,17 @@
-# TEC Redshift Disk Specification (Revision 002)
+
+# TEC Redshift Disk Specification (Revision 003-multi-session)
 [The original specification](https://github.com/Rami-Sabbagh/TEC-Redshift-Disk-Specification) was written by Rami Sabbagh. I decided to fork this project and clean up the layout a little bit, so someone looking to implement this in software can go about it in a more linear fashion.
 
 One discovery I made  is that the uncompressed solution data is **exactly the same** as the .SOLUTION format used by the game, which explains the redundant `PB039` in the header, and might help me figure out the purpose of some of those unknown bytes and ints.
+
+*Changes made for this branch (multi-session) include:* Reducing readable bit planes from 8 to 4, and allowing multiple files to be written to a single disk
 
 # Reading the image file
 The solution data is stored directly on the image using a method called *steganography*. To read out the image, implement this code in your preferred language:
 
 ```
-Allocate a bit stream with [width * height * 3] slots
-For each bit plane in the image, from LSB to MSB:
+Allocate a bit stream with [width * height * 12] slots
+For each of the four readable bit planes, starting at LSB:
 	For each pixel in the image (Left to right, then top to bottom):
 		Add lowest bit of red channel to bit stream
 		Add lowest bit of green channel to bit stream
@@ -35,20 +38,25 @@ The .SOLUTION file format uses multiple different data types:
   - (Byte[]) Arbitrary, non-terminated ASCII or UTF-8 data
 - (Table{Object}) Complex data type used to store arrays of objects
   - (Int) Number of entries
-  - (TableEntry{Object}[]) For each entry:
+  - For each entry:
     - (Int) Entry index, starting at 0
 	- (Object) Entry data
 
 # Raw disk image data
 The data on the disk image itself consists of the following:
-- (Int) Length of the compressed solution data
-- (Int) 16-bit [Fletcher's checksum](https://en.wikipedia.org/wiki/Fletcher's_checksum) of the compressed solution data, stored in a 32-bit Int, for some reason
-- (Byte[]) Compressed solution data
-- Any data you might find after this point is irrelevant garbage data. Just don't use it - If you're reading the disk in real time, you should just stop at this point.
+- For each file stored on the disk:
+	- (Int) Length of the compressed solution data
+	- (Int) 16-bit [Fletcher's checksum](https://en.wikipedia.org/wiki/Fletcher's_checksum) of the compressed solution data, stored in a 32-bit Int, for some reason
+	- (Byte[]) Compressed solution data
+	- Any data you might find after this point is irrelevant garbage data. Just don't use it - If you're reading the disk in real time, you should just stop at this point.
+- (Int) Constant 0, to signal that no more files exist on the disk
+- (Byte[]) Garbage data, running until the end of the disk
 
 The solution data is compressed using Zlib / DEFLATE, to save disk space.
 
 # Decompressed image data
+You don't necessarily have to store a file in this format (.SOLUTION). The microdisk can store any file, provided the compressed file is smaller than the remaining space on the disk. *Yes, this includes other PNG images, go on and make the Matryoshka disk image of your dreams!*
+
 As mentioned at the start, the decompressed image data is just a .SOLUTION file. I'd imagine that, since Zachtronics already made a file format just to hold user code, they decided to not make **another** format just to load onto the disks, and instead just loaded a compressed copy of a .SOLUTION file onto the disk.
 
 The .SOLUTION file format consists of a **header** and one or more **agents**, stuck together with no delimiters or padding.
@@ -56,7 +64,7 @@ The .SOLUTION file format consists of a **header** and one or more **agents**, s
 **Note**: Due to a recent discovery (see `HeaderBreakdown.txt`) regarding the headers of these files, I've been forced to revise the *Data types* and *Header data* sections.
 
 ## Header data
-- (Int) Unknown purpose - Most likely used as file magic, always `FE 03 00 00`
+- (Int) Unknown purpose - Most likely used as file magic, always `EF 03 00 00`
 - (String) Level ID - For Redshift disks, this is always `PB039`
 - (String) Solution name - Usually written on the disk image
 - (Int) Unknown purpose - Most likely used as padding, always `00 00 00 00`
@@ -64,7 +72,7 @@ The .SOLUTION file format consists of a **header** and one or more **agents**, s
 - (Table{Int}) Statistics - Cycles, line count, activity [1]
 - (Int) Agent count - How many EXAs you start the solution with
 
-[1] For campaign levels, set the auxiliary statistics value to 0, and populate the statistics table. For battle and sandbox levels, set the auxiliary statistics value to the solution's line count, and insert but **do not** populate the statistics table.
+[1] For campaign levels, set the auxiliary statistics value to 0, and populate the statistics table. For battle and sandbox levels, set the auxiliary statistics value to the solution's line count, and insert but **do not** populate the statistics table. *For battle levels, the line count value doesn't actually exist, for some reason battles don't have statistics*
 
 ## Agent data
 - (Byte) Unknown purpose - Most likely used as line return, always `0A`
@@ -77,9 +85,6 @@ The .SOLUTION file format consists of a **header** and one or more **agents**, s
 - (Boolean) Is M-bus local by default?
 - (Boolean[]) Default sprite [2]
 
-[1] The text here is exactly the same as what you see in the game's editor, encoded using Unix line endings, `\n - 0x0A`
+[1] The text here is exactly the same as what you see in the game's editor, encoded using Unix line endings, `\n 0x0A`
 
-[2] Array of 100 Booleans, read left to right, then top to bottom - True = White pixel, False = Black pixel. This data is also present on campaign and battle levels, even though those levels lack the mechanics necessary for such sprite data to be of any use.
-
-# Outro
-That's what we've discoverd about the TEC disks format so far, use it for good please ;)
+[2] Array of 100 Booleans, read left to right, then top to bottom. True = White pixel, False = Black pixel. This data is also present on campaign and battle levels, even though those levels lack the mechanics necessary for such sprite data to be of any use.
