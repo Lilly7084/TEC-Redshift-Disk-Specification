@@ -4,15 +4,15 @@
 One discovery I made  is that the uncompressed solution data is **exactly the same** as the .SOLUTION format used by the game, which explains the redundant `PB039` in the header, and might help me figure out the purpose of some of those unknown bytes and ints.
 
 # Reading the image file
-The solution data is stored directly on the image using a method called *steganography*. To read out the image, implement this code in your preferred language:
+The solution data is stored directly on the image using a method called *steganography*. To read out the image:
 
 ```
 Allocate a bit stream with [width * height * 3] slots
 For each bit plane in the image, from LSB to MSB:
 	For each pixel in the image (Left to right, then top to bottom):
-		Add lowest bit of red channel to bit stream
-		Add lowest bit of green channel to bit stream
-		Add lowest bit of blue channel to bit stream
+		Add the current bit of the red channel to bit stream
+		Add the current bit of the green channel to bit stream
+		Add the current bit of the blue channel to bit stream
 ```
 
 Please note that with very large solutions, the game may [store data in higher bit planes.](https://www.reddit.com/r/exapunks/comments/dumqv1/if_youre_curious_a_game_cartridge_filled_to_the/) It's recommended that your reader/writer program supports this mode.
@@ -37,23 +37,21 @@ The .SOLUTION file format uses multiple different data types:
   - (Int) Number of entries
   - (TableEntry{Object}[]) For each entry:
     - (Int) Entry index, starting at 0
-	- (Object) Entry data
+    - (Object) Entry data
 
 # Raw disk image data
 The data on the disk image itself consists of the following:
 - (Int) Length of the compressed solution data
 - (Int) 16-bit [Fletcher's checksum](https://en.wikipedia.org/wiki/Fletcher's_checksum) of the compressed solution data, stored in a 32-bit Int, for some reason
-- (Byte[]) Compressed solution data
+- (Byte[]) Compressed solution data, using the Zlib compression algorithm
 - Any data you might find after this point is irrelevant garbage data. Just don't use it - If you're reading the disk in real time, you should just stop at this point.
 
-The solution data is compressed using Zlib / DEFLATE, to save disk space.
-
 # Decompressed image data
-As mentioned at the start, the decompressed image data is just a .SOLUTION file. I'd imagine that, since Zachtronics already made a file format just to hold user code, they decided to not make **another** format just to load onto the disks, and instead just loaded a compressed copy of a .SOLUTION file onto the disk.
+As mentioned at the start, the decompressed image data is just a .SOLUTION file. I'd imagine that, since Zachtronics already made a file format to hold level solutions, they decided to not make **another** format just to load onto the disks, and instead used a readily-available compression algorithm on the existing format.
 
 The .SOLUTION file format consists of a **header** and one or more **agents**, stuck together with no delimiters or padding.
 
-**Note**: Due to a recent discovery (see `HeaderBreakdown.txt`) regarding the headers of these files, I've been forced to revise the *Data types* and *Header data* sections.
+**Note**: Due to a discovery (see `HeaderBreakdown.txt`) regarding the headers of these files, I've been forced to revise the *Data types* and *Header data* sections.
 
 ## Header data
 - (Int) Unknown purpose - Most likely used as file magic, always `FE 03 00 00`
@@ -80,6 +78,3 @@ The .SOLUTION file format consists of a **header** and one or more **agents**, s
 [1] The text here is exactly the same as what you see in the game's editor, encoded using Unix line endings, `\n - 0x0A`
 
 [2] Array of 100 Booleans, read left to right, then top to bottom - True = White pixel, False = Black pixel. This data is also present on campaign and battle levels, even though those levels lack the mechanics necessary for such sprite data to be of any use.
-
-# Outro
-That's what we've discoverd about the TEC disks format so far, use it for good please ;)
